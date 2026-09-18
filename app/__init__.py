@@ -3,6 +3,7 @@ import os
 from flask import Flask, request
 from flask_migrate import Migrate
 from flask_smorest import Api
+from sqlalchemy import text
 
 from app.config import Config
 from app.database import db
@@ -40,6 +41,15 @@ def create_app(db_url=None):
             response.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
             response.headers["Vary"] = "Origin"
         return response
+
+    @app.get("/healthz")
+    def healthz():
+        try:
+            db.session.execute(text("SELECT 1"))
+        except Exception:
+            app.logger.exception("Health check failed")
+            return {"status": "error", "database": "unreachable"}, 503
+        return {"status": "ok"}
 
     from app.cli import register_cli
 

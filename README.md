@@ -19,7 +19,21 @@ migrations/          Alembic (Flask-Migrate)
 docs/database-schema.md   ER diagram and table notes
 ```
 
-## Setup
+## Run with Docker
+
+```bash
+cp .env.example .env              # then set POSTGRES_PASSWORD
+docker compose up -d --build      # Postgres + API on http://localhost:8000
+docker compose exec api flask seed-demo
+```
+
+- The API container applies migrations on startup (`RUN_MIGRATIONS=1`). Set it to `0` when you run several replicas, and run `flask db upgrade` once from a separate job.
+- The app is served by gunicorn on port 8000 as a non-root user. `GET /healthz` returns 503 when the database is unreachable.
+- Data lives in named volumes: `db-data` (Postgres) and `uploads` (supporting documents at `/data/uploads`).
+- The image only installs the runtime dependencies. The old RAG packages are in the optional `rag` group (`uv sync --group rag`).
+- `app/.env` is never copied into the image. Configuration comes from the environment (`DATABASE_URL`, `UPLOAD_FOLDER`, `CORS_ORIGINS`, `DEFAULT_VENDOR_ID`).
+
+## Local setup (without Docker)
 
 1. Point `DATABASE_URL` in `app/.env` at a PostgreSQL database (see `app/.env.example`).
 2. Apply the migration and load demo data:

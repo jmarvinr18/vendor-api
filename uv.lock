@@ -894,6 +894,15 @@ wheels = [
 ]
 
 [[package]]
+name = "gunicorn"
+version = "26.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d9/8a/e4ef6ee11701b6cd64702848415ffb69eeff85cb388a3c6c7fe86f22f3f8/gunicorn-26.2.0.tar.gz", hash = "sha256:62b864895d9ebff0b2f9867ba04fe811c93121596540830c9c916d0769668447", size = 787921, upload-time = "2026-08-24T15:05:59.3Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/85/7522a52e5e2f42faf1a129113ab63e548c42e103e9af395b7bfe65e403e2/gunicorn-26.2.0-py3-none-any.whl", hash = "sha256:bd249d0b3f7972f7432f0a6b6ff3b3ee2d129f70cd1ff6c09a9dd9e29a2b88e3", size = 228389, upload-time = "2026-08-24T15:05:57.67Z" },
+]
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3149,12 +3158,23 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "flask" },
-    { name = "flask-caching" },
-    { name = "flask-marshmallow" },
     { name = "flask-migrate" },
     { name = "flask-smorest" },
     { name = "flask-sqlalchemy" },
+    { name = "gunicorn" },
+    { name = "marshmallow" },
+    { name = "psycopg2-binary" },
+    { name = "python-dotenv" },
+    { name = "sqlalchemy" },
+]
+
+[package.dev-dependencies]
+dev = [
     { name = "ipykernel" },
+]
+rag = [
+    { name = "flask-caching" },
+    { name = "flask-marshmallow" },
     { name = "langchain", extra = ["aws"] },
     { name = "langchain-community" },
     { name = "langchain-google-genai" },
@@ -3164,14 +3184,11 @@ dependencies = [
     { name = "nltk" },
     { name = "pdf2image" },
     { name = "pgvector" },
-    { name = "psycopg2-binary" },
     { name = "pypdf" },
-    { name = "python-dotenv" },
     { name = "rank-bm25" },
     { name = "redis" },
     { name = "rq" },
     { name = "shortuuid" },
-    { name = "sqlalchemy" },
     { name = "sqlalchemy-utils" },
     { name = "streamlit", extra = ["pdf"] },
 ]
@@ -3179,12 +3196,21 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "flask", specifier = ">=3.1.3" },
-    { name = "flask-caching", specifier = ">=2.5.1" },
-    { name = "flask-marshmallow", specifier = ">=1.5.0" },
     { name = "flask-migrate", specifier = ">=4.1.0" },
     { name = "flask-smorest", specifier = ">=0.47.0" },
     { name = "flask-sqlalchemy", specifier = ">=3.1.1" },
-    { name = "ipykernel", specifier = ">=7.3.0" },
+    { name = "gunicorn", specifier = ">=23.0.0" },
+    { name = "marshmallow", specifier = ">=4.0.0" },
+    { name = "psycopg2-binary", specifier = ">=2.9.13" },
+    { name = "python-dotenv", specifier = ">=1.2.3" },
+    { name = "sqlalchemy", specifier = ">=2.0.54" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ipykernel", specifier = ">=7.3.0" }]
+rag = [
+    { name = "flask-caching", specifier = ">=2.5.1" },
+    { name = "flask-marshmallow", specifier = ">=1.5.0" },
     { name = "langchain", extras = ["aws"], specifier = ">=1.4.1" },
     { name = "langchain-community", specifier = ">=0.4.2" },
     { name = "langchain-google-genai", specifier = ">=4.4.0" },
@@ -3194,14 +3220,11 @@ requires-dist = [
     { name = "nltk", specifier = ">=3.10.3" },
     { name = "pdf2image", specifier = ">=1.17.0" },
     { name = "pgvector", specifier = ">=0.3.6" },
-    { name = "psycopg2-binary", specifier = ">=2.9.13" },
     { name = "pypdf", specifier = ">=6.19.0" },
-    { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "redis", specifier = ">=8.1.0" },
     { name = "rq", specifier = ">=2.12.0" },
     { name = "shortuuid", specifier = ">=1.0.13" },
-    { name = "sqlalchemy", specifier = ">=2.0.54" },
     { name = "sqlalchemy-utils", specifier = ">=0.42.1" },
     { name = "streamlit", extras = ["pdf"], specifier = ">=1.64.0" },
 ]

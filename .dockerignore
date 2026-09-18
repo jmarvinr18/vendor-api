@@ -1,0 +1,22 @@
+.git
+.gitignore
+.venv
+.python-version
+**/__pycache__
+**/*.py[oc]
+.claude
+
+# Secrets: configuration comes from the container environment instead.
+**/.env
+**/.env.*
+!**/.env.example
+app/.flaskenv
+
+uploads/
+docs/
+README.md
+docker-compose*.yml
+Dockerfile
+.dockerignore
+main.py
+requirements.txt
