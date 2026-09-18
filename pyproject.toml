@@ -1,0 +1,34 @@
+[project]
+name = "vendor-portal-api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "flask>=3.1.3",
+    "flask-caching>=2.5.1",
+    "flask-marshmallow>=1.5.0",
+    "flask-migrate>=4.1.0",
+    "flask-smorest>=0.47.0",
+    "flask-sqlalchemy>=3.1.1",
+    "ipykernel>=7.3.0",
+    "langchain[aws]>=1.4.1",
+    "langchain-community>=0.4.2",
+    "langchain-google-genai>=4.4.0",
+    "langchain-ollama>=1.1.0",
+    "langchain-postgres>=0.0.18",
+    "pgvector>=0.3.6",
+    "psycopg2-binary>=2.9.13",
+    "pypdf>=6.19.0",
+    "python-dotenv>=1.2.3",
+    "redis>=8.1.0",
+    "rq>=2.12.0",
+    "shortuuid>=1.0.13",
+    "sqlalchemy>=2.0.54",
+    "sqlalchemy-utils>=0.42.1",
+    "streamlit[pdf]>=1.64.0",
+    "langchain-text-splitters>=1.1.2",
+    "nltk>=3.10.3",
+    "rank-bm25>=0.2.2",
+    "pdf2image>=1.17.0",
+]

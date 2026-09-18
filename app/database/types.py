@@ -1,0 +1,1 @@
+from pgvector.sqlalchemy import Vector
