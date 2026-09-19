@@ -28,7 +28,13 @@ class ExtractionList(MethodView):
         status is `completed` or `failed`. This does not create an invoice.
         """
         upload = request.files.get("file")
+
+        print(f"UPLOAD: {upload}")
+
         file = IncomingFile(upload.filename, upload.stream) if upload and upload.filename else None
+
+        print(f"FILE: {file}")
+
         return get_extraction_service().upload(get_current_vendor(), file)
 
 

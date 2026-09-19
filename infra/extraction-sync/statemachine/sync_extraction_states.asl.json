@@ -1,0 +1,76 @@
+{
+  "Comment": "States to merge into the deployed ExtractInvoice state machine. Point the state that writes processed/<...>.jsonl at SyncExtraction (\"Next\": \"SyncExtraction\"), and route its failure Catch blocks to MarkExtractionFailed. Replace <SyncExtractionFunctionArn> with the stack output. $.detail is the original EventBridge S3 event, so the step before must keep it (use ResultPath, not OutputPath, on earlier tasks).",
+  "States": {
+    "SyncExtraction": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "<SyncExtractionFunctionArn>",
+        "Payload": {
+          "bucket.$": "$.detail.bucket.name",
+          "sourceKey.$": "$.detail.object.key"
+        }
+      },
+      "ResultSelector": {
+        "sync.$": "$.Payload"
+      },
+      "ResultPath": "$.syncExtraction",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException",
+            "InterfaceError",
+            "OperationalError"
+          ],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 4,
+          "BackoffRate": 2
+        },
+        {
+          "Comment": "The JSONL may not be visible yet right after it was written.",
+          "ErrorEquals": ["NoSuchKey"],
+          "IntervalSeconds": 3,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "MarkExtractionFailed"
+        }
+      ],
+      "End": true
+    },
+    "MarkExtractionFailed": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "<SyncExtractionFunctionArn>",
+        "Payload": {
+          "sourceKey.$": "$.detail.object.key",
+          "error.$": "$.error"
+        }
+      },
+      "ResultPath": null,
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Next": "ExtractionFailed"
+    },
+    "ExtractionFailed": {
+      "Type": "Fail",
+      "Error": "ExtractionFailed",
+      "Cause": "Text extraction failed; the extraction was marked failed for the vendor."
+    }
+  }
+}

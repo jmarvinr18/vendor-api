@@ -37,3 +37,10 @@ class DocumentStorage(ABC):
     def delete_many(self, keys: list[str]) -> None:
         for key in keys:
             self.delete(key)
+
+    def exists(self, key: str) -> bool:
+        try:
+            self.open(key).close()
+        except StoredObjectNotFound:
+            return False
+        return True

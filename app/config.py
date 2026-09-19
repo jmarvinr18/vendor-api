@@ -46,6 +46,9 @@ class Config:
     # "AES256" (S3-managed keys), "aws:kms", or empty to use the bucket's default.
     S3_SERVER_SIDE_ENCRYPTION = os.getenv("S3_SERVER_SIDE_ENCRYPTION", "AES256")
     S3_KMS_KEY_ID = os.getenv("S3_KMS_KEY_ID")
+    # Where the OCR pipeline writes its result for a scan, in the same bucket. Placeholders:
+    # {stem} scan file name without extension, {name}, {dir}, {key} (full key without extension).
+    EXTRACTION_RESULT_KEY_TEMPLATE = os.getenv("EXTRACTION_RESULT_KEY_TEMPLATE", "processed/{stem}.jsonl")
 
     # Used when STORAGE_BACKEND=local.
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", str(PROJECT_DIR / "uploads"))

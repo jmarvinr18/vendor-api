@@ -63,6 +63,17 @@ class S3DocumentStorage(DocumentStorage):
             raise StorageError(f"Could not read {key} from S3.") from exc
         return response["Body"]
 
+    def exists(self, key: str) -> bool:
+        try:
+            self._client.head_object(Bucket=self._bucket, Key=self._object_key(key))
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in _NOT_FOUND_CODES:
+                return False
+            raise StorageError(f"Could not check {key} in S3.") from exc
+        except BotoCoreError as exc:
+            raise StorageError(f"Could not check {key} in S3.") from exc
+        return True
+
     def delete(self, key: str) -> None:
         try:
             self._client.delete_object(Bucket=self._bucket, Key=self._object_key(key))

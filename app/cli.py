@@ -63,6 +63,32 @@ def register_cli(app):
         click.echo(f"Seeded {len(SEEDS)} invoices for {vendor.name}")
         click.echo(f"X-Vendor-Id: {vendor.id}  (or set DEFAULT_VENDOR_ID in app/.env)")
 
+    documents = AppGroup("documents", help="Invoice and supporting document storage.")
+    app.cli.add_command(documents)
+
+    @documents.command("push-to-s3")
+    @click.option("--dry-run", is_flag=True, help="Only report what would be copied.")
+    def documents_push_to_s3(dry_run):
+        """Copy documents stored on local disk (UPLOAD_FOLDER) into the S3 bucket."""
+        from app.extensions.storage import get_document_storage
+        from app.services.document_migration import DocumentMigration
+        from app.services.storage import LocalDocumentStorage, S3DocumentStorage
+
+        target = get_document_storage()
+        if not isinstance(target, S3DocumentStorage):
+            raise click.ClickException("Set STORAGE_BACKEND=s3 (and S3_BUCKET) to push documents to S3.")
+        report = DocumentMigration(db.session, LocalDocumentStorage(app.config["UPLOAD_FOLDER"]), target).run(dry_run)
+
+        verb = "Would copy" if dry_run else "Copied"
+        for key in report.copied:
+            click.echo(f"{verb}: {key}")
+        for doc in report.missing:
+            click.echo(f"Missing (re-upload needed): invoice {doc.invoice_id}  {doc.file_name}  [{doc.storage_path}]")
+        click.echo(
+            f"{len(report.already_stored)} already in S3, {len(report.copied)} {verb.lower()}, "
+            f"{len(report.missing)} missing."
+        )
+
     extraction = AppGroup("extraction", help="Simulate the OCR pipeline in development.")
     app.cli.add_command(extraction)
 

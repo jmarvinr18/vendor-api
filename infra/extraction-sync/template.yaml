@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  SyncExtraction Lambda for the vendor portal OCR pipeline. Invoked by the ExtractInvoice
+  state machine after it writes processed/<...>.jsonl; copies the text, entities and status into
+  the document_extractions table so GET /api/v1/extractions/{id} returns the result.
+
+Parameters:
+  DocumentBucketName:
+    Type: String
+    Description: The bucket holding scans and the pipeline's processed/ output (the API's S3_BUCKET).
+  KeyPrefix:
+    Type: String
+    Default: vendor-portal
+    Description: The API's S3_KEY_PREFIX. Scans are stored under <KeyPrefix>/extractions/.
+  ProcessedPrefix:
+    Type: String
+    Default: processed
+    Description: Folder the pipeline writes its .jsonl output to.
+  ProcessedKeyTemplate:
+    Type: String
+    Default: "processed/{stem}.jsonl"
+    Description: >
+      Where the JSONL for a scan lives, used when the state machine passes only sourceKey.
+      Placeholders: {stem} file name without extension, {name}, {dir}, {key} (source key without extension).
+  DatabaseSecretArn:
+    Type: String
+    Description: Secrets Manager secret with {"host", "port", "username", "password", "dbname"}.
+  DatabaseKmsKeyArn:
+    Type: String
+    Default: ""
+    Description: KMS key encrypting the database secret, if it isn't the AWS-managed key.
+  DatabaseSslMode:
+    Type: String
+    Default: verify
+    AllowedValues: [verify, require, disable]
+    Description: >
+      verify checks the server certificate (bundle the RDS CA as rds-ca.pem and set DatabaseSslRootCert);
+      require encrypts without verification; disable only for databases without TLS.
+  DatabaseSslRootCert:
+    Type: String
+    Default: ""
+    Description: CA bundle path inside the package, e.g. rds-ca.pem. Empty uses the system trust store.
+  SubnetIds:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: Private subnets that can reach the database. Empty runs the Lambda outside a VPC.
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: ""
+    Description: Security group(s) the database allows on 5432 (with SubnetIds).
+  StateMachineRoleName:
+    Type: String
+    Default: ""
+    Description: >
+      Name of the ExtractInvoice state machine's execution role. When set, this stack grants it
+      lambda:InvokeFunction on SyncExtraction. Otherwise add that permission yourself.
+
+Conditions:
+  HasDatabaseKmsKey: !Not [!Equals [!Ref DatabaseKmsKeyArn, ""]]
+  InVpc: !Not [!Equals [!Join ["", !Ref SubnetIds], ""]]
+  GrantStateMachine: !Not [!Equals [!Ref StateMachineRoleName, ""]]
+
+Resources:
+  SyncExtractionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Stores the OCR pipeline's JSONL result in document_extractions.
+      CodeUri: functions/sync_extraction/
+      Handler: app.handler
+      Runtime: python3.13
+      Architectures: [arm64]
+      Timeout: 60
+      MemorySize: 256
+      Tracing: Active
+      Environment:
+        Variables:
+          KEY_PREFIX: !Ref KeyPrefix
+          PROCESSED_KEY_TEMPLATE: !Ref ProcessedKeyTemplate
+          DB_SECRET_ARN: !Ref DatabaseSecretArn
+          DB_SSL_MODE: !Ref DatabaseSslMode
+          DB_SSL_ROOT_CERT: !Ref DatabaseSslRootCert
+      VpcConfig: !If
+        - InVpc
+        - SubnetIds: !Ref SubnetIds
+          SecurityGroupIds: !Ref SecurityGroupIds
+        - !Ref AWS::NoValue
+      Policies:
+        - AWSLambdaVPCAccessExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub arn:aws:s3:::${DocumentBucketName}/${ProcessedPrefix}/*
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref DatabaseSecretArn
+            - !If
+              - HasDatabaseKmsKey
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Ref DatabaseKmsKeyArn
+              - !Ref AWS::NoValue
+
+  SyncExtractionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${SyncExtractionFunction}
+      RetentionInDays: 30
+
+  StateMachineInvokePolicy:
+    Type: AWS::IAM::Policy
+    Condition: GrantStateMachine
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-invoke-sync-extraction
+      Roles: [!Ref StateMachineRoleName]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: lambda:InvokeFunction
+            Resource:
+              - !GetAtt SyncExtractionFunction.Arn
+              - !Sub ${SyncExtractionFunction.Arn}:*
+
+Outputs:
+  SyncExtractionFunctionArn:
+    Description: Use as FunctionName in the state machine's SyncExtraction task.
+    Value: !GetAtt SyncExtractionFunction.Arn

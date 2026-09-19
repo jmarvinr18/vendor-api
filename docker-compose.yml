@@ -37,6 +37,7 @@ services:
       S3_KEY_PREFIX: ${S3_KEY_PREFIX:-vendor-portal}
       S3_SERVER_SIDE_ENCRYPTION: ${S3_SERVER_SIDE_ENCRYPTION-AES256}
       S3_KMS_KEY_ID: ${S3_KMS_KEY_ID:-}
+      EXTRACTION_RESULT_KEY_TEMPLATE: ${EXTRACTION_RESULT_KEY_TEMPLATE:-processed/{stem}.jsonl}
       # Passed through only when set in .env or the shell. Leave them unset on AWS
       # (ECS task role / EC2 instance profile) so boto3 uses the role instead.
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}

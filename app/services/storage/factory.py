@@ -42,3 +42,18 @@ def build_document_storage(config: dict) -> DocumentStorage:
         return LocalDocumentStorage(config["UPLOAD_FOLDER"])
 
     raise RuntimeError(f"Unknown STORAGE_BACKEND '{backend}'. Use 's3' or 'local'.")
+
+
+def build_extraction_result_source(config: dict):
+    """Where OCR results are read from: the pipeline's processed/ output in the S3 bucket,
+    or nothing for local storage (results are recorded with `flask extraction` instead)."""
+    from app.services.extraction_results import NoExtractionResults, S3ExtractionResultSource
+
+    if (config.get("STORAGE_BACKEND") or "s3").lower() != "s3":
+        return NoExtractionResults()
+    return S3ExtractionResultSource(
+        create_s3_client(config),
+        config["S3_BUCKET"],
+        key_prefix=config.get("S3_KEY_PREFIX", ""),
+        key_template=config.get("EXTRACTION_RESULT_KEY_TEMPLATE") or "processed/{stem}.jsonl",
+    )

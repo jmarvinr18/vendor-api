@@ -45,6 +45,8 @@ Uploaded invoice and supporting documents are stored in S3. The database keeps o
 | `S3_SERVER_SIDE_ENCRYPTION` | `AES256` | `aws:kms` with `S3_KMS_KEY_ID`, or empty for the bucket default |
 | `S3_ENDPOINT_URL` | – | Only for S3-compatible emulators |
 
+Documents uploaded while the API ran with `STORAGE_BACKEND=local` stay on local disk. To copy them into S3, run `flask documents push-to-s3` (or `docker compose exec api flask documents push-to-s3`); add `--dry-run` to preview. It skips files already in S3 and lists any file that exists in neither place, which must be re-uploaded.
+
 To add another backend (for example Azure Blob), implement `DocumentStorage` and register it in `services/storage/factory.py`. The services don't change.
 
 ## Tests

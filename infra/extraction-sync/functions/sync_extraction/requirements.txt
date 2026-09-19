@@ -1,0 +1,2 @@
+# Pure-Python PostgreSQL driver: no native build step for the Lambda package.
+pg8000>=1.31,<2
