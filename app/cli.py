@@ -1,12 +1,14 @@
+import json
 from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 import click
+from flask.cli import AppGroup
 from sqlalchemy import select
 
 from app.constants import STAGES
 from app.database import db
-from app.model import Invoice, InvoiceComment, InvoiceDocument, InvoiceStage, Vendor
+from app.model import DocumentExtraction, Invoice, InvoiceComment, InvoiceDocument, InvoiceStage, Vendor
 
 # Same demo data as vendor-portal/src/data/invoices.ts.
 SEEDS = [
@@ -60,6 +62,51 @@ def register_cli(app):
         db.session.commit()
         click.echo(f"Seeded {len(SEEDS)} invoices for {vendor.name}")
         click.echo(f"X-Vendor-Id: {vendor.id}  (or set DEFAULT_VENDOR_ID in app/.env)")
+
+    extraction = AppGroup("extraction", help="Simulate the OCR pipeline in development.")
+    app.cli.add_command(extraction)
+
+    @extraction.command("list")
+    def extraction_list():
+        """Show recent scanned-invoice extractions."""
+        rows = db.session.scalars(
+            select(DocumentExtraction).order_by(DocumentExtraction.created_at.desc()).limit(20)
+        )
+        for row in rows:
+            click.echo(f"{row.id}  {row.status:<9}  {row.file_name}")
+
+    @extraction.command("complete")
+    @click.argument("extraction_id", type=click.UUID)
+    @click.argument("result_file", type=click.File("r", encoding="utf-8"))
+    def extraction_complete(extraction_id, result_file):
+        """Record OCR output for an extraction, as the pipeline's Lambda would.
+
+        RESULT_FILE is the Lambda's JSON output: {"text": "...", "entities": [...]}
+        (e.g. sample_invoice_scanned.jsonl).
+        """
+        from app.extensions.storage import get_extraction_service
+
+        row = db.session.get(DocumentExtraction, extraction_id)
+        if row is None:
+            raise click.ClickException("Extraction not found.")
+        result = json.load(result_file)
+        get_extraction_service().complete(
+            row.storage_key, result.get("text") or "", result.get("entities") or []
+        )
+        click.echo(f"Extraction {extraction_id} completed.")
+
+    @extraction.command("fail")
+    @click.argument("extraction_id", type=click.UUID)
+    @click.argument("message", default="Text could not be extracted from this document.")
+    def extraction_fail(extraction_id, message):
+        """Mark an extraction as failed, as the pipeline would on a Textract error."""
+        from app.extensions.storage import get_extraction_service
+
+        row = db.session.get(DocumentExtraction, extraction_id)
+        if row is None:
+            raise click.ClickException("Extraction not found.")
+        get_extraction_service().fail(row.storage_key, message)
+        click.echo(f"Extraction {extraction_id} marked failed.")
 
 
 def _build_invoice(vendor, index, no, day, po, description, amount, status):

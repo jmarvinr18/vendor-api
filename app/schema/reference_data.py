@@ -7,6 +7,11 @@ class UploadRulesSchema(Schema):
     max_files = fields.Int(data_key="maxFiles")
 
 
+class ExtractableFieldSchema(Schema):
+    key = fields.Str()
+    label = fields.Str()
+
+
 class ReferenceDataSchema(Schema):
     invoice_types = fields.List(fields.Str(), data_key="invoiceTypes")
     credit_terms = fields.List(fields.Str(), data_key="creditTerms")
@@ -14,4 +19,5 @@ class ReferenceDataSchema(Schema):
     stages = fields.List(fields.Str())
     document_types = fields.List(fields.Str(), data_key="documentTypes")
     vat_rate = fields.Float(data_key="vatRate")
+    extractable_fields = fields.List(fields.Nested(ExtractableFieldSchema), data_key="extractableFields")
     upload = fields.Nested(UploadRulesSchema)

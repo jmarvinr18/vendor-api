@@ -33,7 +33,21 @@ class Config:
     OPENAPI_SWAGGER_UI_PATH = "/swagger-ui"
     OPENAPI_SWAGGER_UI_URL = "https://cdn.jsdelivr.net/npm/swagger-ui-dist/"
 
-    # Uploaded supporting documents are stored on disk under this folder.
+    # Where invoice and supporting documents are stored: "s3" or "local" (development only).
+    STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "s3")
+
+    # S3 settings. Credentials are not configured here: boto3 uses the standard AWS chain
+    # (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, AWS_PROFILE, or the instance/task role).
+    S3_BUCKET = os.getenv("S3_BUCKET")
+    S3_REGION = os.getenv("S3_REGION") or os.getenv("AWS_DEFAULT_REGION")
+    # Only for S3-compatible services such as LocalStack or MinIO.
+    S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL")
+    S3_KEY_PREFIX = os.getenv("S3_KEY_PREFIX", "vendor-portal")
+    # "AES256" (S3-managed keys), "aws:kms", or empty to use the bucket's default.
+    S3_SERVER_SIDE_ENCRYPTION = os.getenv("S3_SERVER_SIDE_ENCRYPTION", "AES256")
+    S3_KMS_KEY_ID = os.getenv("S3_KMS_KEY_ID")
+
+    # Used when STORAGE_BACKEND=local.
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", str(PROJECT_DIR / "uploads"))
     # Ten 10MB files plus form overhead.
     MAX_CONTENT_LENGTH = 110 * 1024 * 1024

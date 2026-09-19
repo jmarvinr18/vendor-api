@@ -5,6 +5,7 @@ description = "Flask API for the Vendor Portal (invoice submission and status tr
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "boto3>=1.40.0",
     "flask>=3.1.3",
     "flask-migrate>=4.1.0",
     "flask-smorest>=0.47.0",
@@ -19,6 +20,8 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ipykernel>=7.3.0",
+    "moto[s3]>=5.1.0",
+    "pytest>=8.4.0",
 ]
 # Leftovers from the RAG prototype this project started from; not used by the API.
 # Install with `uv sync --group rag` if you still need them locally.
@@ -42,3 +45,6 @@ rag = [
     "rank-bm25>=0.2.2",
     "pdf2image>=1.17.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

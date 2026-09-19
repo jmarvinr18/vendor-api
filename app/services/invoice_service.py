@@ -4,13 +4,10 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from flask_smorest import abort
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
-from werkzeug.datastructures import FileStorage
 
 from app.constants import (
-    DOCUMENT_TYPES,
     STAGE_AP_VALIDATION,
     STAGE_BUSINESS_APPROVAL,
     STAGE_COMPLETED,
@@ -18,16 +15,13 @@ from app.constants import (
     STAGE_SUBMITTED,
     STAGES,
     STATUS_INFO,
-    UPLOAD_EXTENSIONS,
-    UPLOAD_MAX_FILE_SIZE,
-    UPLOAD_MAX_FILES,
     status_for_stage,
 )
 from app.database import db
-from app.model import Invoice, InvoiceComment, InvoiceDocument, InvoiceStage, Vendor
-from app.services import file_storage
-
-MAX_FILE_SIZE_LABEL = f"{UPLOAD_MAX_FILE_SIZE // (1024 * 1024)}MB"
+from app.model import Invoice, InvoiceComment, InvoiceStage, Vendor
+from app.services.document_service import DocumentService
+from app.services.errors import Conflict, NotFound, ValidationFailed
+from app.services.invoice_rules import require_draft
 
 
 def _now():
@@ -99,15 +93,8 @@ def get_invoice(vendor: Vendor, invoice_id: uuid.UUID) -> Invoice:
     invoice = db.session.get(Invoice, invoice_id)
     # Another vendor's invoice is reported as missing rather than forbidden.
     if invoice is None or invoice.vendor_id != vendor.id:
-        abort(404, message="Invoice not found.")
+        raise NotFound("Invoice not found.")
     return invoice
-
-
-def get_document(invoice: Invoice, document_id: uuid.UUID) -> InvoiceDocument:
-    document = db.session.get(InvoiceDocument, document_id)
-    if document is None or document.invoice_id != invoice.id:
-        abort(404, message="Document not found.")
-    return document
 
 
 def stage_views(invoice: Invoice) -> list[dict]:
@@ -143,11 +130,6 @@ def timeline(invoice: Invoice) -> dict:
 # ---------- Drafts ----------
 
 
-def _require_draft(invoice: Invoice, action: str):
-    if invoice.status != "Draft":
-        abort(409, message=f"Only draft invoices can be {action}.")
-
-
 def _apply_fields(invoice: Invoice, data: dict):
     for key, value in data.items():
         if isinstance(value, str):
@@ -173,95 +155,18 @@ def create_draft(vendor: Vendor, data: dict) -> Invoice:
 
 
 def update_draft(invoice: Invoice, data: dict) -> Invoice:
-    _require_draft(invoice, "edited")
+    require_draft(invoice, "edited")
     _apply_fields(invoice, data)
     db.session.commit()
     return invoice
 
 
-def delete_draft(invoice: Invoice):
-    _require_draft(invoice, "deleted")
-    paths = [doc.storage_path for doc in invoice.documents]
+def delete_draft(invoice: Invoice, documents: DocumentService):
+    require_draft(invoice, "deleted")
+    stored = list(invoice.documents)
     db.session.delete(invoice)
     db.session.commit()
-    for path in paths:
-        file_storage.delete_file(path)
-
-
-# ---------- Documents ----------
-
-
-def guess_doc_type(name: str) -> str:
-    upper = name.upper()
-    if upper.startswith("INV"):
-        return "Invoice"
-    if upper.startswith("PO") or upper.startswith("PR"):
-        return "Purchase Order"
-    if upper.startswith("DR"):
-        return "Delivery Receipt"
-    return "Other"
-
-
-def add_documents(invoice: Invoice, uploads: list[FileStorage], doc_types: list[str]) -> list[InvoiceDocument]:
-    _require_draft(invoice, "changed")
-    uploads = [u for u in uploads if u and u.filename]
-    if not uploads:
-        abort(422, message="Attach at least one file in the 'files' field.")
-
-    # Validate everything first so a bad file doesn't leave a partial upload behind.
-    problems = []
-    checked = []
-    for i, upload in enumerate(uploads):
-        name = upload.filename.replace("\\", "/").rsplit("/", 1)[-1][:255]
-        extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-        size = file_storage.file_size(upload)
-        doc_type = doc_types[i] if i < len(doc_types) and doc_types[i] else guess_doc_type(name)
-        if extension not in UPLOAD_EXTENSIONS:
-            problems.append(f"{name}: unsupported format. Use PDF, JPG or PNG.")
-        elif size > UPLOAD_MAX_FILE_SIZE:
-            problems.append(f"{name}: exceeds the {MAX_FILE_SIZE_LABEL} limit.")
-        elif size == 0:
-            problems.append(f"{name}: file is empty.")
-        elif doc_type not in DOCUMENT_TYPES:
-            problems.append(f"{name}: unknown document type '{doc_type}'.")
-        checked.append((upload, name, extension, size, doc_type))
-
-    if len(invoice.documents) + len(uploads) > UPLOAD_MAX_FILES:
-        problems.append(f"You can upload up to {UPLOAD_MAX_FILES} files.")
-    if problems:
-        abort(422, message="Some files could not be uploaded.", errors={"files": problems})
-
-    saved_paths = []
-    created = []
-    try:
-        for upload, name, extension, size, doc_type in checked:
-            path = file_storage.save_invoice_file(invoice.id, upload, extension)
-            saved_paths.append(path)
-            document = InvoiceDocument(
-                file_name=name,
-                doc_type=doc_type,
-                extension=extension,
-                content_type=upload.mimetype or None,
-                size_bytes=size,
-                storage_path=path,
-            )
-            invoice.documents.append(document)
-            created.append(document)
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-        for path in saved_paths:
-            file_storage.delete_file(path)
-        raise
-    return created
-
-
-def remove_document(invoice: Invoice, document: InvoiceDocument):
-    _require_draft(invoice, "changed")
-    path = document.storage_path
-    db.session.delete(document)
-    db.session.commit()
-    file_storage.delete_file(path)
+    documents.discard_files(stored)
 
 
 # ---------- Submission ----------
@@ -314,10 +219,10 @@ def _new_reference_no(year: int) -> str:
 
 
 def submit(invoice: Invoice) -> Invoice:
-    _require_draft(invoice, "submitted")
+    require_draft(invoice, "submitted")
     errors = validation_errors(invoice)
     if errors:
-        abort(422, message="The invoice is incomplete.", errors=errors)
+        raise ValidationFailed("The invoice is incomplete.", errors=errors)
 
     duplicate = db.session.scalar(
         select(Invoice.reference_no).where(
@@ -328,7 +233,7 @@ def submit(invoice: Invoice) -> Invoice:
         )
     )
     if duplicate:
-        abort(409, message=f"Invoice {invoice.invoice_no} was already submitted ({duplicate}).")
+        raise Conflict(f"Invoice {invoice.invoice_no} was already submitted ({duplicate}).")
 
     now = _now()
     invoice.reference_no = _new_reference_no(now.year)
@@ -361,14 +266,14 @@ def add_comment(invoice: Invoice, author: str, message: str) -> InvoiceComment:
 def get_invoice_for_ap(invoice_id: uuid.UUID) -> Invoice:
     invoice = db.session.get(Invoice, invoice_id)
     if invoice is None:
-        abort(404, message="Invoice not found.")
+        raise NotFound("Invoice not found.")
     return invoice
 
 
 def advance(invoice: Invoice, comment: str | None) -> Invoice:
     """Moves a submitted invoice to its next processing stage."""
     if invoice.status in ("Draft", "Rejected", "Paid"):
-        abort(409, message=f"A {invoice.status.lower()} invoice cannot be advanced.")
+        raise Conflict(f"A {invoice.status.lower()} invoice cannot be advanced.")
 
     now = _now()
     next_stage = invoice.current_stage + 1
@@ -385,7 +290,7 @@ def advance(invoice: Invoice, comment: str | None) -> Invoice:
 def reject(invoice: Invoice, reason: str) -> Invoice:
     """Rejects an invoice during AP validation or business approval."""
     if invoice.status not in ("Submitted", "Under Review"):
-        abort(409, message="Only invoices in AP validation or business approval can be rejected.")
+        raise Conflict("Only invoices in AP validation or business approval can be rejected.")
 
     now = _now()
     # Rejected invoices stop at Business Approval, as in the UI.

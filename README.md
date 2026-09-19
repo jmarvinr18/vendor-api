@@ -11,12 +11,47 @@ app/
   constants.py       invoice types, credit terms, statuses, stages (mirrors the Vue app)
   cli.py             `flask seed-demo`
   database/          SQLAlchemy instance
+  extensions/        storage.py: builds the document storage once, wires DocumentService per request
   model/             vendor, invoice, invoice_document, invoice_comment, invoice_stage
   schema/            marshmallow request/response schemas (camelCase JSON)
-  services/          business rules: invoice_service, file_storage, current_vendor
-  routes/            flask-smorest blueprints
+  services/          business logic (no HTTP code; raises errors from services/errors.py)
+    invoice_service.py    drafts, submission, status workflow
+    document_service.py   upload / read / remove invoice and supporting documents
+    upload_validator.py   file rules: type, magic bytes, size, count, document type
+    invoice_rules.py      rules shared by services (e.g. only drafts can change)
+    storage/              DocumentStorage interface + S3 and local implementations
+  routes/            flask-smorest blueprints (thin: parse request, call a service)
 migrations/          Alembic (Flask-Migrate)
+tests/               pytest; S3 is mocked with moto
 docs/database-schema.md   ER diagram and table notes
+```
+
+## Document storage (AWS S3)
+
+Uploaded invoice and supporting documents are stored in S3. The database keeps only the object key and metadata.
+
+- **Object keys:** `<S3_KEY_PREFIX>/invoices/<invoice id>/<random>.<ext>`. The vendor's file name is stored only in the database.
+- **Security:** objects are private and encrypted at rest (SSE-S3 `AES256` by default, or `aws:kms`). Downloads are streamed through the API, so the vendor check still applies and the bucket never needs to be public or have CORS.
+- **Validation before upload:** the file type is checked by its first bytes, not just its extension, and the stored content type comes from the file type rather than the client. The size, file count and document type are also checked. If any file is invalid, nothing is uploaded.
+- **Consistency:** if storing a file or saving the record fails part-way, the objects already uploaded are deleted again. Removing a document, or deleting a draft, deletes its objects. If S3 is down, the API returns 503.
+- **Credentials:** these come from the standard AWS chain: `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, or the ECS task / EC2 instance role. The IAM identity only needs `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` on `arn:aws:s3:::<bucket>/<prefix>/*`.
+
+| Setting | Default | |
+| --- | --- | --- |
+| `STORAGE_BACKEND` | `s3` | `local` stores files on disk under `UPLOAD_FOLDER` (development only) |
+| `S3_BUCKET` | – | Required for `s3` |
+| `S3_REGION` | `AWS_DEFAULT_REGION` | |
+| `S3_KEY_PREFIX` | `vendor-portal` | |
+| `S3_SERVER_SIDE_ENCRYPTION` | `AES256` | `aws:kms` with `S3_KMS_KEY_ID`, or empty for the bucket default |
+| `S3_ENDPOINT_URL` | – | Only for S3-compatible emulators |
+
+To add another backend (for example Azure Blob), implement `DocumentStorage` and register it in `services/storage/factory.py`. The services don't change.
+
+## Tests
+
+```bash
+uv sync
+uv run pytest
 ```
 
 ## Run with Docker
@@ -26,6 +61,8 @@ cp .env.example .env              # then set POSTGRES_PASSWORD
 docker compose up -d --build      # Postgres + API on http://localhost:8000
 docker compose exec api flask seed-demo
 ```
+
+Set `S3_BUCKET` and the AWS credentials in `.env`. To try it without AWS, uncomment the "Local S3 emulator" lines in `.env` and start the stack with `docker compose --profile local-s3 up -d`. This runs a moto S3 server and creates the bucket for you.
 
 - The API container applies migrations on startup (`RUN_MIGRATIONS=1`). Set it to `0` when you run several replicas, and run `flask db upgrade` once from a separate job.
 - The app is served by gunicorn on port 8000 as a non-root user. `GET /healthz` returns 503 when the database is unreachable.
@@ -75,5 +112,10 @@ Every vendor endpoint needs `X-Vendor-Id` (or `DEFAULT_VENDOR_ID`). This is a pl
 | GET, POST | `/invoices/{id}/comments` | Comments page |
 | POST | `/ap/invoices/{id}/advance` | AP back office: move to the next stage. **No auth yet.** |
 | POST | `/ap/invoices/{id}/reject` | AP back office: reject with a reason. **No auth yet.** |
+| POST | `/extractions` | Scan invoice: upload one scanned invoice (multipart `file`). Stored in S3, which starts the OCR pipeline. Returns 202 with a `pending` extraction. |
+| GET | `/extractions/{id}` | Poll until `completed`/`failed`. Returns the text, entities and `candidates` (values with a suggested invoice field). |
+| DELETE | `/extractions/{id}` | Discard a scan and its extracted text |
 
 Submit flow from the UI: `POST /invoices` → `POST /invoices/{id}/documents` → `POST /invoices/{id}/submit`.
+
+Scan-to-fill: `POST /extractions` → S3 → EventBridge → Step Functions → Textract → Lambda → `document_extractions` → `GET /extractions/{id}`. See [infra/ocr-pipeline/README.md](infra/ocr-pipeline/README.md) for the AWS stack and `flask extraction complete <id> <result.json>` for simulating the pipeline locally.

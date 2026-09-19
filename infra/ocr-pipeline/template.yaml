@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Vendor portal OCR pipeline. A scanned invoice stored by the API under
+  <KeyPrefix>/extractions/ triggers EventBridge -> Step Functions -> Textract text detection
+  -> Lambda (Comprehend entities) -> row update in the vendor portal PostgreSQL database.
+
+Parameters:
+  DocumentBucketName:
+    Type: String
+    Description: The API's S3_BUCKET. EventBridge notifications must be enabled on it (see README).
+  KeyPrefix:
+    Type: String
+    Default: vendor-portal
+    Description: The API's S3_KEY_PREFIX.
+  DatabaseSecretArn:
+    Type: String
+    Description: >
+      Secrets Manager secret with the database connection
+      ({"host", "port", "username", "password", "dbname"}), e.g. the RDS-managed secret.
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnets that can reach the database (and AWS APIs via NAT or VPC endpoints).
+  SecurityGroupIds:
+    Type: List<AWS::EC2::SecurityGroup::Id>
+    Description: Security group(s) allowed to connect to the database.
+  DatabaseKmsKeyArn:
+    Type: String
+    Default: ""
+    Description: KMS key encrypting the database secret, if it isn't the AWS-managed key.
+
+Conditions:
+  HasDatabaseKmsKey: !Not [!Equals [!Ref DatabaseKmsKeyArn, ""]]
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures: [arm64]
+    Timeout: 120
+    MemorySize: 512
+    Tracing: Active
+
+Resources:
+  StoreExtractionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Reads Textract output, runs Comprehend entity detection, stores the result.
+      CodeUri: functions/store_extraction/
+      Handler: app.handler
+      Environment:
+        Variables:
+          KEY_PREFIX: !Ref KeyPrefix
+          DB_SECRET_ARN: !Ref DatabaseSecretArn
+      VpcConfig:
+        SubnetIds: !Ref SubnetIds
+        SecurityGroupIds: !Ref SecurityGroupIds
+      Policies:
+        - AWSLambdaVPCAccessExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - textract:GetDocumentTextDetection
+                - comprehend:DetectEntities
+              Resource: "*"
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref DatabaseSecretArn
+            - !If
+              - HasDatabaseKmsKey
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: !Ref DatabaseKmsKeyArn
+              - !Ref AWS::NoValue
+
+  StoreExtractionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${StoreExtractionFunction}
+      RetentionInDays: 30
+
+  ExtractInvoiceStateMachineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/vendedlogs/states/${AWS::StackName}-extract-invoice
+      RetentionInDays: 30
+
+  ExtractInvoiceStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Type: STANDARD
+      DefinitionUri: statemachine/extract_invoice.asl.json
+      DefinitionSubstitutions:
+        StoreExtractionFunctionArn: !GetAtt StoreExtractionFunction.Arn
+      Tracing:
+        Enabled: true
+      Logging:
+        Level: ERROR
+        IncludeExecutionData: false
+        Destinations:
+          - CloudWatchLogsLogGroup:
+              LogGroupArn: !GetAtt ExtractInvoiceStateMachineLogGroup.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref StoreExtractionFunction
+        - Statement:
+            - Effect: Allow
+              Action:
+                - textract:StartDocumentTextDetection
+                - textract:GetDocumentTextDetection
+              Resource: "*"
+            # Textract reads the document with the caller's permissions.
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub arn:aws:s3:::${DocumentBucketName}/${KeyPrefix}/extractions/*
+            - Effect: Allow
+              Action:
+                - logs:CreateLogDelivery
+                - logs:GetLogDelivery
+                - logs:UpdateLogDelivery
+                - logs:DeleteLogDelivery
+                - logs:ListLogDeliveries
+                - logs:PutResourcePolicy
+                - logs:DescribeResourcePolicies
+                - logs:DescribeLogGroups
+              Resource: "*"
+      Events:
+        ScannedInvoiceUploaded:
+          Type: EventBridgeRule
+          Properties:
+            Pattern:
+              source: [aws.s3]
+              detail-type: [Object Created]
+              detail:
+                bucket:
+                  name: [!Ref DocumentBucketName]
+                object:
+                  key: [{ prefix: !Sub "${KeyPrefix}/extractions/" }]
+            RetryPolicy:
+              MaximumRetryAttempts: 5
+              MaximumEventAgeInSeconds: 900
+
+Outputs:
+  StateMachineArn:
+    Value: !Ref ExtractInvoiceStateMachine
+  StoreExtractionFunctionName:
+    Value: !Ref StoreExtractionFunction

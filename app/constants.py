@@ -122,3 +122,31 @@ def status_for_stage(stage: int) -> str:
     if stage >= STAGE_COMPLETED:
         return "Paid"
     return "Approved"
+
+
+# ---------- Invoice scanning (OCR auto-fill) ----------
+
+# pending: stored in S3, waiting for the Textract pipeline; completed / failed: set by the
+# pipeline's Lambda (see infra/ocr-pipeline).
+EXTRACTION_STATUSES = ["pending", "completed", "failed"]
+
+# Invoice form fields an extracted value can be tagged as (keys match the Vue form).
+EXTRACTABLE_FIELDS = {
+    "vendorName": "Vendor Name",
+    "invoiceType": "Invoice Type",
+    "invoiceNo": "Invoice No.",
+    "invoiceDate": "Invoice Date",
+    "description": "Description",
+    "poPrNo": "PO/PR #",
+    "drNo": "DR#",
+    "dateReceived": "Date Received",
+    "creditTerms": "Credit Terms",
+    "invoiceAmount": "Invoice Amount",
+    "vatableSales": "Vatable Sales",
+    "vat": "VAT",
+    "nonVat": "Non-Vat",
+}
+
+# Storage keys for scanned invoices live under this prefix; the S3 EventBridge rule that
+# starts the OCR pipeline matches on it.
+EXTRACTION_KEY_PREFIX = "extractions"

@@ -25,6 +25,9 @@ class ReferenceData(MethodView):
             "stages": constants.STAGES,
             "document_types": constants.DOCUMENT_TYPES,
             "vat_rate": constants.VAT_RATE,
+            "extractable_fields": [
+                {"key": key, "label": label} for key, label in constants.EXTRACTABLE_FIELDS.items()
+            ],
             "upload": {
                 "accepted_extensions": constants.UPLOAD_EXTENSIONS,
                 "max_file_size": constants.UPLOAD_MAX_FILE_SIZE,

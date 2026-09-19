@@ -1,0 +1,144 @@
+{
+    "source_key": "vendor-portal/invoices/sample_invoice_scanned.pdf",
+    "text": "NORTHSTAR OFFICE SUPPLIES\nINVOICE\n123 Business Park Avenue, Makati City, Philippines\nTIN: 123-456-789-000\nINV-2026-0919-0042\nDate: September 19, 2026\nBILL TO\nSample Customer Corporation\n45 Example Street, BGC, Taguig City\nPhilippines\nDESCRIPTION\nQTY\nUNIT\nAMOUNT\nOffice workstation accessories\n2\n\u20b12,500.00\n\u20b15,000.00\nUSB-C docking station\n1\n\u20b14,250.00\n\u20b14,250.00\nWireless keyboard and mouse\n2\n\u20b11,350.00\n\u20b12,700.00\nSubtotal:\n\u20b111,950.00\nVAT (12%):\n\u20b11,434.00\nTOTAL:\n\u20b113,384.00\nPAYMENT TERMS\nPayment due within 15 days from invoice date.\nPayment method: Bank transfer\nNOTES\nThank you for your business.\nAuthorized Representative",
+    "entities": [
+        {
+            "type": "ORGANIZATION",
+            "text": "NORTHSTAR OFFICE SUPPLIES",
+            "score": 0.8024769425392151
+        },
+        {
+            "type": "LOCATION",
+            "text": "123 Business Park Avenue, Makati City, Philippines",
+            "score": 0.9838135838508606
+        },
+        {
+            "type": "OTHER",
+            "text": "123-456-789-000",
+            "score": 0.9973873496055603
+        },
+        {
+            "type": "OTHER",
+            "text": "-2026-0919-0042",
+            "score": 0.7163624167442322
+        },
+        {
+            "type": "DATE",
+            "text": "September 19, 2026",
+            "score": 0.9986862540245056
+        },
+        {
+            "type": "ORGANIZATION",
+            "text": "Corporation",
+            "score": 0.6431555151939392
+        },
+        {
+            "type": "LOCATION",
+            "text": "45 Example Street, BGC, Taguig City\nPhilippines",
+            "score": 0.9765641093254089
+        },
+        {
+            "type": "ORGANIZATION",
+            "text": "QTY",
+            "score": 0.33710041642189026
+        },
+        {
+            "type": "QUANTITY",
+            "text": "2",
+            "score": 0.6477958559989929
+        },
+        {
+            "type": "QUANTITY",
+            "text": "\u20b12,500.00",
+            "score": 0.9695641994476318
+        },
+        {
+            "type": "QUANTITY",
+            "text": "\u20b15,000.00",
+            "score": 0.9731111526489258
+        },
+        {
+            "type": "QUANTITY",
+            "text": "1",
+            "score": 0.5720444917678833
+        },
+        {
+            "type": "QUANTITY",
+            "text": "\u20b14,250.00",
+            "score": 0.9785538911819458
+        },
+        {
+            "type": "QUANTITY",
+            "text": "\u20b14,250.00",
+            "score": 0.9723856449127197
+        },
+        {
+            "type": "QUANTITY",
+            "text": "2",
+            "score": 0.6582270860671997
+        },
+        {
+            "type": "QUANTITY",
+            "text": "\u20b11,350.00",
+            "score": 0.9738613963127136
+        },
+        {
+            "type": "QUANTITY",
+            "text": "\u20b12,700.00",
+            "score": 0.9827790260314941
+        },
+        {
+            "type": "QUANTITY",
+            "text": "\u20b111,950.00",
+            "score": 0.9912091493606567
+        },
+        {
+            "type": "QUANTITY",
+            "text": "12%",
+            "score": 0.9882751703262329
+        },
+        {
+            "type": "QUANTITY",
+            "text": "\u20b11,434.00",
+            "score": 0.9910368919372559
+        },
+        {
+            "type": "QUANTITY",
+            "text": "\u20b113,384.00",
+            "score": 0.994530439376831
+        },
+        {
+            "type": "QUANTITY",
+            "text": "15 days",
+            "score": 0.9079747200012207
+        }
+    ],
+    "pii_spans": [
+        {
+            "type": "ADDRESS",
+            "begin": 34,
+            "end": 84
+        },
+        {
+            "type": "US_INDIVIDUAL_TAX_IDENTIFICATION_NUMBER",
+            "begin": 90,
+            "end": 105
+        },
+        {
+            "type": "DATE_TIME",
+            "begin": 131,
+            "end": 149
+        },
+        {
+            "type": "ADDRESS",
+            "begin": 186,
+            "end": 221
+        },
+        {
+            "type": "ADDRESS",
+            "begin": 222,
+            "end": 233
+        }
+    ],
+    "char_count": 619
+}

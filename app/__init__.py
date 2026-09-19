@@ -1,4 +1,4 @@
-import os
+from http import HTTPStatus
 
 from flask import Flask, request
 from flask_migrate import Migrate
@@ -7,21 +7,24 @@ from sqlalchemy import text
 
 from app.config import Config
 from app.database import db
+from app.extensions.storage import init_storage
+from app.services.errors import ServiceError
 from app import model  # noqa: F401  (registers models with SQLAlchemy / Alembic)
 
 migrate = Migrate()
 
 
-def create_app(db_url=None):
+def create_app(db_url=None, config_overrides=None, document_storage=None):
 
     app = Flask(__name__)
     app.config.from_object(Config)
     if db_url:
         app.config["SQLALCHEMY_DATABASE_URI"] = db_url
-
-    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    app.config.update(config_overrides or {})
 
     db.init_app(app)
+    # S3 (or local disk in development) for invoice and supporting documents.
+    init_storage(app, document_storage)
     # Schema changes go through migrations (flask db upgrade), not db.create_all().
     migrate.init_app(app=app, db=db)
 
@@ -30,6 +33,18 @@ def create_app(db_url=None):
 
     for blp in blueprints:
         api_endpoints.register_blueprint(blp)
+
+    @app.errorhandler(ServiceError)
+    def handle_service_error(error: ServiceError):
+        # Same body shape as flask-smorest's own errors.
+        body = {
+            "code": error.status_code,
+            "status": HTTPStatus(error.status_code).phrase,
+            "message": error.message,
+        }
+        if error.errors:
+            body["errors"] = error.errors
+        return body, error.status_code
 
     @app.after_request
     def add_cors_headers(response):

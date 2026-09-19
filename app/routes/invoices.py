@@ -9,6 +9,7 @@ from app.schema import (
     InvoiceSummarySchema,
     InvoiceTimelineSchema,
 )
+from app.extensions.storage import get_document_service
 from app.services import invoice_service
 from app.services.current_vendor import get_current_vendor
 
@@ -67,7 +68,7 @@ class InvoiceDetail(MethodView):
     def delete(self, invoice_id):
         """Discard a draft invoice and its uploaded files"""
         invoice = invoice_service.get_invoice(get_current_vendor(), invoice_id)
-        invoice_service.delete_draft(invoice)
+        invoice_service.delete_draft(invoice, get_document_service())
 
 
 @blp.route("/<uuid:invoice_id>/submit")
