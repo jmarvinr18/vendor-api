@@ -38,6 +38,13 @@ services:
       S3_SERVER_SIDE_ENCRYPTION: ${S3_SERVER_SIDE_ENCRYPTION-AES256}
       S3_KMS_KEY_ID: ${S3_KMS_KEY_ID:-}
       EXTRACTION_RESULT_KEY_TEMPLATE: ${EXTRACTION_RESULT_KEY_TEMPLATE:-processed/{stem}.jsonl}
+      # The AI agent service: AgentCore runtime, or an HTTP endpoint (see .env.example).
+      AI_AGENT_RUNTIME_ARN: ${AI_AGENT_RUNTIME_ARN:-}
+      AI_AGENT_REGION: ${AI_AGENT_REGION:-ap-southeast-1}
+      AI_AGENT_QUALIFIER: ${AI_AGENT_QUALIFIER:-DEFAULT}
+      AI_AGENT_URL: ${AI_AGENT_URL:-}
+      AI_AGENT_TOKEN: ${AI_AGENT_TOKEN:-}
+      AI_RATE_LIMIT_PER_MINUTE: ${AI_RATE_LIMIT_PER_MINUTE:-10}
       # Passed through only when set in .env or the shell. Leave them unset on AWS
       # (ECS task role / EC2 instance profile) so boto3 uses the role instead.
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
@@ -48,6 +55,10 @@ services:
       - uploads:/data/uploads
     ports:
       - "${API_HOST_PORT:-8000}:8000"
+    extra_hosts:
+      # Lets AI_AGENT_URL reach an agent running on the host rather than in a container.
+      # Docker Desktop resolves this name already; the mapping is what adds Linux.
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
   # ---- Optional local S3 for development: `docker compose --profile local-s3 up` ----

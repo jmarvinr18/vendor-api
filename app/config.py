@@ -50,6 +50,27 @@ class Config:
     # {stem} scan file name without extension, {name}, {dir}, {key} (full key without extension).
     EXTRACTION_RESULT_KEY_TEMPLATE = os.getenv("EXTRACTION_RESULT_KEY_TEMPLATE", "processed/{stem}.jsonl")
 
+    # ---- AI assistant ----
+    # The agent itself is a separate service (LangChain / LangGraph on Amazon Bedrock
+    # AgentCore Runtime); this API only relays the vendor's message to it.
+    # Set the runtime ARN to call AgentCore. Credentials come from the same AWS chain as S3;
+    # the IAM identity needs bedrock-agentcore:InvokeAgentRuntime on it.
+    AI_AGENT_RUNTIME_ARN = os.getenv("AI_AGENT_RUNTIME_ARN")
+    AI_AGENT_REGION = os.getenv("AI_AGENT_REGION") or os.getenv("AWS_DEFAULT_REGION") or "ap-southeast-1"
+    # The AgentCore endpoint version to invoke: "DEFAULT", or an endpoint name.
+    AI_AGENT_QUALIFIER = os.getenv("AI_AGENT_QUALIFIER", "DEFAULT")
+    # Used instead when no runtime ARN is set: the agent reachable over plain HTTP
+    # (the agent repository running locally, or behind a load balancer).
+    AI_AGENT_URL = os.getenv("AI_AGENT_URL")
+    # Sent as "Authorization: Bearer ..." with AI_AGENT_URL.
+    AI_AGENT_TOKEN = os.getenv("AI_AGENT_TOKEN")
+    AI_AGENT_TIMEOUT_SECONDS = float(os.getenv("AI_AGENT_TIMEOUT_SECONDS", 75))
+    # Stored messages sent to the agent as history, conversation length, and messages a
+    # vendor may send per minute.
+    AI_HISTORY_MESSAGES = int(os.getenv("AI_HISTORY_MESSAGES", 20))
+    AI_MAX_MESSAGES_PER_SESSION = int(os.getenv("AI_MAX_MESSAGES_PER_SESSION", 100))
+    AI_RATE_LIMIT_PER_MINUTE = int(os.getenv("AI_RATE_LIMIT_PER_MINUTE", 10))
+
     # Used when STORAGE_BACKEND=local.
     UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", str(PROJECT_DIR / "uploads"))
     # Ten 10MB files plus form overhead.

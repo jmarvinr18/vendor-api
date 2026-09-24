@@ -20,9 +20,12 @@ app/
     upload_validator.py   file rules: type, magic bytes, size, count, document type
     invoice_rules.py      rules shared by services (e.g. only drafts can change)
     storage/              DocumentStorage interface + S3 and local implementations
+    ai/                   the AI conversation transcript (chat_service.py) and the client for the
+                          agent service (agent_client.py); no prompts, models or tools live here
   routes/            flask-smorest blueprints (thin: parse request, call a service)
 migrations/          Alembic (Flask-Migrate)
 tests/               pytest; S3 is mocked with moto
+docs/api-integration.md   endpoint reference, and step-by-step AgentCore integration
 docs/database-schema.md   ER diagram and table notes
 ```
 
@@ -48,6 +51,50 @@ Uploaded invoice and supporting documents are stored in S3. The database keeps o
 Documents uploaded while the API ran with `STORAGE_BACKEND=local` stay on local disk. To copy them into S3, run `flask documents push-to-s3` (or `docker compose exec api flask documents push-to-s3`); add `--dry-run` to preview. It skips files already in S3 and lists any file that exists in neither place, which must be re-uploaded.
 
 To add another backend (for example Azure Blob), implement `DocumentStorage` and register it in `services/storage/factory.py`. The services don't change.
+
+## AI assistant
+
+The agent is **not** in this repository. It is built separately with LangChain / LangGraph and
+hosted on Amazon Bedrock AgentCore Runtime. **[docs/api-integration.md](docs/api-integration.md)
+is the step-by-step guide** for building and wiring it up. This API keeps one endpoint:
+
+| Method | Path | |
+| --- | --- | --- |
+| POST | `/api/v1/ai/messages` | Take the vendor's message, relay it to the agent, store and return both |
+
+It owns the transcript (`ai_sessions`, `ai_messages`), the per-vendor limits, and the vendor
+scoping. Prompts, models, tools and retrieval all live in the agent repository.
+
+- **Sessions:** omit `sessionId` to start a conversation; the response returns the id to send with the next message. The conversation id is passed to AgentCore as `runtimeSessionId`, so the agent's own memory or LangGraph checkpointer can key on it.
+- **What the agent receives:** `{ message, sessionId, agentId, vendor: { id, name }, context, history }`. `history` is the conversation *before* this message (up to `AI_HISTORY_MESSAGES` stored messages) - the new message is `message`. It is sent so a stateless agent still has the context; one that keeps its own memory can ignore it.
+- **What the agent should answer:** `{ reply, citations?, model?, usage?: { inputTokens, outputTokens }, toolCalls? }`. Only `reply` is required; the rest is stored for cost tracking and the UI's source links. A plain-text body is also accepted as the reply.
+- **Storage:** a question and its answer are stored together only once the answer exists. A failed agent call (429/503) stores nothing, so the vendor can retry.
+- **Limits:** each vendor may send `AI_RATE_LIMIT_PER_MINUTE` messages per minute (429 above that) and a conversation holds up to `AI_MAX_MESSAGES_PER_SESSION` messages (409 above that).
+
+### Pointing it at the agent
+
+Set `AI_AGENT_RUNTIME_ARN` to invoke AgentCore, or `AI_AGENT_URL` to call the agent over plain
+HTTP (useful while running the agent repository locally). With neither set, the endpoint answers
+503 and nothing else in the API is affected.
+
+```bash
+curl -X POST localhost:8000/api/v1/ai/messages -H 'Content-Type: application/json' \
+  -H "X-Vendor-Id: $VENDOR_ID" -d '{"content": "Where is invoice INV-2026-0524?"}'
+```
+
+### IAM
+
+The API's AWS identity needs this in `AI_AGENT_REGION`:
+
+```json
+[
+  {
+    "Effect": "Allow",
+    "Action": "bedrock-agentcore:InvokeAgentRuntime",
+    "Resource": "arn:aws:bedrock-agentcore:ap-southeast-1:<account>:runtime/<runtime-id>*"
+  }
+]
+```
 
 ## Tests
 
@@ -117,6 +164,7 @@ Every vendor endpoint needs `X-Vendor-Id` (or `DEFAULT_VENDOR_ID`). This is a pl
 | POST | `/extractions` | Scan invoice: upload one scanned invoice (multipart `file`). Stored in S3, which starts the OCR pipeline. Returns 202 with a `pending` extraction. |
 | GET | `/extractions/{id}` | Poll until `completed`/`failed`. Returns the text, entities and `candidates` (values with a suggested invoice field). |
 | DELETE | `/extractions/{id}` | Discard a scan and its extracted text |
+| POST | `/ai/messages` | Send a message to the AI assistant: `{ content, sessionId?, agentId?, context?: { invoiceId? } }` (max 4000 chars). Returns `{ sessionId, userMessage, assistantMessage }`. |
 
 Submit flow from the UI: `POST /invoices` → `POST /invoices/{id}/documents` → `POST /invoices/{id}/submit`.
 

@@ -34,3 +34,13 @@ class StorageUnavailable(ServiceError):
     """The document store could not be reached or rejected the request."""
 
     status_code = 503
+
+
+class TooManyRequests(ServiceError):
+    status_code = 429
+
+
+class AgentUnavailable(ServiceError):
+    """The AI agent service could not be reached or rejected the request."""
+
+    status_code = 503

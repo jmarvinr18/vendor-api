@@ -18,13 +18,17 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ---------- Runtime stage ----------
 FROM python:3.13-slim AS runtime
 
+# Threads, not just processes: an SSE answer (POST /ai/messages/stream) holds its worker for
+# the whole reply, and a sync worker serves nothing else meanwhile - three open streams would
+# starve /healthz and the HEALTHCHECK below would kill the container. A threaded worker also
+# means --timeout guards worker liveness rather than capping how long one answer may take.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
     FLASK_APP=app \
     UPLOAD_FOLDER=/data/uploads \
     RUN_MIGRATIONS=1 \
-    GUNICORN_CMD_ARGS="--bind=0.0.0.0:8000 --workers=3 --timeout=60 --access-logfile=-"
+    GUNICORN_CMD_ARGS="--bind=0.0.0.0:8000 --workers=3 --threads=8 --worker-class=gthread --timeout=60 --access-logfile=-"
 
 RUN groupadd --system app && useradd --system --gid app --create-home --home-dir /home/app app \
     && mkdir -p /data/uploads && chown -R app:app /data

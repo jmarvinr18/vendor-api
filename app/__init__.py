@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from app.config import Config
 from app.database import db
+from app.extensions.ai import init_ai
 from app.extensions.storage import init_storage
 from app.services.errors import ServiceError
 from app import model  # noqa: F401  (registers models with SQLAlchemy / Alembic)
@@ -14,7 +15,7 @@ from app import model  # noqa: F401  (registers models with SQLAlchemy / Alembic
 migrate = Migrate()
 
 
-def create_app(db_url=None, config_overrides=None, document_storage=None):
+def create_app(db_url=None, config_overrides=None, document_storage=None, agent_client=None):
 
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -25,6 +26,8 @@ def create_app(db_url=None, config_overrides=None, document_storage=None):
     db.init_app(app)
     # S3 (or local disk in development) for invoice and supporting documents.
     init_storage(app, document_storage)
+    # The AI agent service (Bedrock AgentCore, or an HTTP endpoint in development).
+    init_ai(app, agent_client)
     # Schema changes go through migrations (flask db upgrade), not db.create_all().
     migrate.init_app(app=app, db=db)
 
@@ -51,7 +54,9 @@ def create_app(db_url=None, config_overrides=None, document_storage=None):
         origin = request.headers.get("Origin")
         if origin and origin in app.config["CORS_ORIGINS"]:
             response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Vendor-Id"
+            # Accept: the AI stream endpoint is asked for text/event-stream, which is not a
+            # CORS-safelisted value, so the browser preflights it.
+            response.headers["Access-Control-Allow-Headers"] = "Accept, Content-Type, X-Vendor-Id"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
             response.headers["Access-Control-Expose-Headers"] = "Content-Disposition"
             response.headers["Vary"] = "Origin"
